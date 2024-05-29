@@ -63,7 +63,7 @@ pub async fn create_embeddings(dataset_paths: Vec<&str>) -> anyhow::Result<Vec<V
 
     let dataset_view: Vec<(&str,&f32)> = dataset.iter().map(|(text,label)| (text.as_str(),label)).collect();
 
-    let embeddings = language_model::embeddings::extract_embeddings(&dataset_view)?;
+    let embeddings = language_model::embeddings::extract_embeddings(&dataset_view).await?;
     let mut output = Vec::new();
     for i in 0..dataset_view.len(){
         output.push(json!(

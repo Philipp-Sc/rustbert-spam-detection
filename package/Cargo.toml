@@ -27,6 +27,7 @@ regex = {version = "1.6.0"}
 lazy_static = {version = "1.4.0"}
 rayon = "1.7.0"
 tokio = { version = "1.18.5", features = ["sync", "macros","rt-multi-thread"]  }
+reqwest = { version = "0.12.4", features = ["json"] }
 
 [profile.release]
 # Enable link-time optimization, eliminates more code and inlines across crate boundaries.

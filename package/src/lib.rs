@@ -7,12 +7,12 @@ use rayon::iter::ParallelIterator;
 use importance::score::Model;
 
 
-pub fn fraud_probabilities(texts: &[&str]) ->  anyhow::Result<Vec<f32>> {
+pub async fn fraud_probabilities(texts: &[&str]) ->  anyhow::Result<Vec<f32>> {
 
     let mut text_embeddings: Vec<Vec<f32>> = Vec::new();
     for text in texts {
 
-       let embedding = build::language_model::embeddings::llama_cpp_embedding(text)?;
+       let embedding = build::language_model::embeddings::llama_cpp_embedding(text).await?;
        text_embeddings.push(embedding);
 
     }

@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
         "generate_embeddings" => {generate_embeddings().await?;},
         "predict" => {
 
-                      let fraud_probabilities = rust_bert_fraud_detection_tools::fraud_probabilities(&SENTENCES)?;
+                      let fraud_probabilities = rust_bert_fraud_detection_tools::fraud_probabilities(&SENTENCES).await?;
                       println!("Predictions:\n{:?}",fraud_probabilities);
                       println!("Labels:\n[1.0, 0.0, 1.0, 0.0, 1.0, 0.0]");
         },
@@ -85,18 +85,21 @@ fn train_and_test_text_embedding_knn_regressor(eval: bool) -> anyhow::Result<()>
 
 async fn generate_embeddings() -> anyhow::Result<()> {
 
-    let mut embeddings = Vec::new();
+    let mut file = File::options()
+        .write(true)
+        .append(true)
+        .open("embeddings_dataset.json")
+        .expect("Failed to open file");
 
     for dataset_path in CSV_DATASET {
-        embeddings.append(&mut create_embeddings(vec![&dataset_path]).await?);
+        let embeddings = create_embeddings(vec![&dataset_path]).await?;
 
-        let json_data = serde_json::to_string_pretty(&embeddings).expect("Failed to serialize to JSON");
-
-        let mut file = File::create("embeddings_dataset.json").expect("Failed to create file");
-        file.write_all(json_data.as_bytes()).expect("Failed to write to file");
+        for embedding in embeddings {
+            let mut json_data = serde_json::to_string(&embedding).expect("Failed to serialize to JSON");
+            json_data.push('\n');
+            file.write_all(json_data.as_bytes()).expect("Failed to write to file");
+        }
     }
-
     return Ok(());
-
 }
 

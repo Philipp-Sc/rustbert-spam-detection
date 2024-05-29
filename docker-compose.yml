@@ -1,0 +1,38 @@
+version: "3"
+services:
+
+  llama-cpp-server-embedding:
+    build:
+      dockerfile: Dockerfile_Llama_cpp
+      context: .
+    container_name: llama-cpp-server-embedding
+    networks:
+      - llama-net
+    volumes:
+      - ./models/:/usr/models
+    command: ["/usr/llama.cpp/server","--host","0.0.0.0","--mlock","-m","/usr/models/uae-large-v1_fp32.gguf","-c","1024","--embedding"]
+    ulimits:
+      rtprio: 95
+      memlock: -1
+
+  llm-fraud-detection:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    container_name: llm-fraud-detection
+    networks:
+      - llama-net
+    volumes:
+      - ./:/usr/workspace
+    environment:
+      DOCKER_EMBEDDING_ENDPOINT: "http://llama-cpp-server-embedding:8080/embedding"
+      EMBEDDING_CONTEXT_SIZE: "1024"
+    depends_on:
+      llama-cpp-server-embedding:
+        condition: service_started
+    command: [ "cargo", "run", "--release" ]
+
+
+networks:
+  llama-net:
+    driver: bridge

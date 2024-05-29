@@ -1,42 +1,74 @@
 use std::fs;
 use std::fs::File;
-use std::process::Command;
 use std::io::{self, Read};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 
-pub fn llama_cpp_embedding(text: &str) -> Result<Vec<f32>, io::Error> {
-    let input = text.to_string().chars().take(8192*4).collect::<String>();
-    let output = Command::new("/usr/llama.cpp/embedding")
-        .args(&["-m", "./una-cybertron-7b-v2-bf16.Q8_0.gguf", "--log-disable", "--ctx-size","8192", "-p", &input])
-        .stderr(std::process::Stdio::null())
-        .output()?;
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Embedding {
+    pub embedding: Vec<f32>,
+}
 
-    if output.status.success() {
-        let output_str = match String::from_utf8(output.stdout) {
-        Ok(s) => s,
-        Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Failed to parse embeddings: {}", e))),
-        };
-        let values: Result<Vec<f32>, _> = output_str
-            .split_whitespace()
-            .map(|s| s.parse())
-            .collect();
+pub async fn llama_cpp_embedding(text: &str) -> Result<Vec<f32>, io::Error> {
 
-        match values {
-            Ok(embeddings) => Ok(embeddings),
-            Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("Failed to parse embeddings: {}", e))),
-        }
+    let docker_embedding_dim = std::env::var("EMBEDDING_CONTEXT_SIZE")
+        .as_ref()
+        .unwrap()
+        .to_string().parse::<usize>().unwrap();
+
+    let input = text.to_string().chars().take(docker_embedding_dim*4).collect::<String>();
+
+    let output = text_embedding_request(&input).await;
+
+    if let Some(embedding) = output {
+        Ok(embedding)
     } else {
         Err(io::Error::new(io::ErrorKind::Other, "Command execution failed"))
     }
 }
 
 
-pub fn extract_embeddings(dataset: &Vec<(&str,&f32)>) -> anyhow::Result<Vec<Vec<f32>>> {
+pub async fn text_embedding_request(text: &str) -> Option<Vec<f32>> {
+    if text.is_empty() {
+        return None;
+    }
+    let client = reqwest::Client::new();
+
+    let json_data = json!({
+        "content": text
+    });
+
+    let docker_embedding_endpoint = std::env::var("DOCKER_EMBEDDING_ENDPOINT")
+        .as_ref()
+        .unwrap()
+        .to_string();
+
+    let response = client
+        .post(docker_embedding_endpoint)
+        .header("Content-Type", "application/json")
+        .body(json_data.to_string())
+        .send()
+        .await;
+
+    if let Ok(response) = response {
+        if response.status().is_success() {
+            let response = response.json::<Embedding>().await;
+            if let Ok(embedding) = response {
+                return Some(embedding.embedding);
+            }
+        }
+    }
+    None
+}
+
+
+pub async fn extract_embeddings(dataset: &Vec<(&str,&f32)>) -> anyhow::Result<Vec<Vec<f32>>> {
     let mut list_outputs: Vec<Vec<f32>> = Vec::new();
 
 
     for text in dataset.iter().map(|x| x.0) {
-        match llama_cpp_embedding(text).map_err(|original_error| {
+        match llama_cpp_embedding(text).await.map_err(|original_error| {
             anyhow::anyhow!(format!("An error occurred during embeddings generation: {:?}",original_error))
         }) {
             Ok(output) => list_outputs.push(output),

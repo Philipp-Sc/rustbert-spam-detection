@@ -85,6 +85,7 @@ fn train_and_test_text_embedding_knn_regressor(eval: bool) -> anyhow::Result<()>
     }
     Ok(())
 }
+use tokio::time::Instant;
 
 async fn generate_embeddings() -> anyhow::Result<()> {
     let buffer_size = 100;
@@ -96,13 +97,18 @@ async fn generate_embeddings() -> anyhow::Result<()> {
         .open("embeddings_dataset.json")
         .expect("Failed to open file")));
 
-    let (total_count,embeddings) = create_embeddings(CSV_DATASET.into()).await?;
+    let (total_count, embeddings) = create_embeddings(CSV_DATASET.into()).await?;
 
-    let fut = embeddings.enumerate().for_each(|(index,embedding_result)|{
-        let total_count = total_count.clone();
+    let start_time = Instant::now();
+    let fut = embeddings.enumerate().for_each(|(index, embedding_result)| {
         let file = file.clone();
-        let buffer = buffer.clone(); async move {
-            println!("{}/{}",index, total_count);
+        let buffer = buffer.clone();
+        async move {
+            let elapsed_time = start_time.elapsed().as_secs_f64();
+            let estimated_time = elapsed_time * (total_count as f64 / (index as f64 + 1.0));
+            let remaining_time = estimated_time - elapsed_time;
+            println!("{}/{} ({}% complete, estimated time remaining: {:.2} seconds)", index, total_count, (index as f64 / total_count as f64) * 100.0, remaining_time);
+
             if let Ok(embedding) = embedding_result {
                 let json_data = serde_json::to_string(&embedding).expect("Failed to serialize to JSON");
                 let mut buffer_lock = buffer.lock().await;
@@ -115,14 +121,13 @@ async fn generate_embeddings() -> anyhow::Result<()> {
                         file.write_all(b"\n").expect("Failed to write newline");
                     }
                 }
-            }else{
-                println!("{:?}",embedding_result);
+            } else {
+                println!("{:?}", embedding_result);
             }
-    }
+        }
     });
 
     fut.await;
-
 
     // Write any remaining items in the buffer
     let mut buffer_lock = buffer.lock().await;
@@ -136,4 +141,3 @@ async fn generate_embeddings() -> anyhow::Result<()> {
 
     return Ok(());
 }
-

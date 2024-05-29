@@ -18,7 +18,7 @@ pub async fn llama_cpp_embedding(text: &str) -> Result<Vec<f32>, io::Error> {
         .unwrap()
         .to_string().parse::<usize>().unwrap();
 
-    let input = text.to_string().chars().take(docker_embedding_dim*4).collect::<String>();
+    let input = text.to_string().chars().take(docker_embedding_dim*3).collect::<String>();
 
     text_embedding_request(&input).await
 }

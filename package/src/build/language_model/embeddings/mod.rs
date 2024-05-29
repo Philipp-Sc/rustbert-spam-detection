@@ -5,6 +5,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use async_stream::stream;
 use futures::stream::Stream;
+use lazy_static::lazy_static;
+use std::sync::{Arc};
+use tokio::sync::Mutex;
+
+lazy_static! {
+    static ref EMBEDDING_MUTEX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Embedding {
@@ -18,8 +25,9 @@ pub async fn llama_cpp_embedding(text: &str) -> Result<Vec<f32>, io::Error> {
         .unwrap()
         .to_string().parse::<usize>().unwrap();
 
-    let input = format!("'''{}'''",text.to_string().chars().take(docker_embedding_dim*4).collect::<String>());
+    let input = text.to_string().chars().take(docker_embedding_dim*4).collect::<String>();
 
+    let _guard = EMBEDDING_MUTEX.lock().await;
     text_embedding_request(&input).await
 }
 

@@ -47,15 +47,15 @@ pub async fn text_embedding_request(text: &str) -> Result<Vec<f32>, io::Error> {
         .await;
 
     if let Ok(ok_response) = response {
-        if response.status().is_success() {
-            let parsed_response = ok_response.json::<Embedding>().await;
-            if let Ok(embedding) = parsed_response {
+        let debug_response = format!("{:?}",ok_response);
+        if ok_response.status().is_success() {
+            if let Ok(embedding) =  ok_response.json::<Embedding>().await {
                 return Ok(embedding.embedding);
             }else{
-                return Err(io::Error::new(io::ErrorKind::Other, format!("Parsing '{:?}' failed: {:?}", ok_response, parsed_response)))
+                return Err(io::Error::new(io::ErrorKind::Other, format!("Parsing failed: {}", debug_response)))
             }
         }else{
-            return Err(io::Error::new(io::ErrorKind::Other, format!("Got negative response status: {:?}",ok_response)))
+            return Err(io::Error::new(io::ErrorKind::Other, format!("Got negative response status: {}",debug_response)))
         }
     }else{
         return Err(io::Error::new(io::ErrorKind::Other, format!("Command execution failed: {:?}",response)))

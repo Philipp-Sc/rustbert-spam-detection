@@ -28,7 +28,17 @@ pub async fn llama_cpp_embedding(text: &str) -> Result<Vec<f32>, io::Error> {
     let input = text.to_string().chars().take(docker_embedding_dim*4).collect::<String>();
 
     let _guard = EMBEDDING_MUTEX.lock().await;
-    text_embedding_request(&input).await
+
+    let mut trials = 0;
+    let mut result = text_embedding_request(&input).await;
+
+    while trials < 3 && result.is_err() {
+        trials += 1;
+        result = text_embedding_request(&input).await;
+    }
+
+    result
+
 }
 
 

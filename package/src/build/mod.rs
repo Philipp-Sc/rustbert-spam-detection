@@ -1,7 +1,8 @@
 use serde_json;
 use std::fs::File;
 use std::io::Write;
-use serde_json::{json, Value};
+use futures::Stream;
+use serde_json::{Value};
 
 pub mod data;
 pub mod classification;
@@ -42,7 +43,7 @@ pub async fn save_training_data(dataset_paths: Vec<&str>) -> anyhow::Result<()> 
 }
 
 
-pub async fn create_embeddings(dataset_paths: Vec<&str>) -> anyhow::Result<Vec<Value>> {
+pub async fn create_embeddings(dataset_paths: Vec<&str>) -> anyhow::Result<(usize,impl Stream<Item = Result<Value, anyhow::Error>>)> {
 
     let dataset: Vec<(String,f32)> = read_datasets(&dataset_paths)?;
 
@@ -61,17 +62,7 @@ pub async fn create_embeddings(dataset_paths: Vec<&str>) -> anyhow::Result<Vec<V
     println!("Spam percentage: {:.2}%", spam_percentage);
     println!("Ham percentage: {:.2}%\n", ham_percentage);
 
-    let dataset_view: Vec<(&str,&f32)> = dataset.iter().map(|(text,label)| (text.as_str(),label)).collect();
+    let embeddings_iter = language_model::embeddings::extract_embeddings(dataset);
 
-    let embeddings = language_model::embeddings::extract_embeddings(&dataset_view).await?;
-    let mut output = Vec::new();
-    for i in 0..dataset_view.len(){
-        output.push(json!(
-            {"entry": vec![Value::from(dataset_view[i].0),Value::from(*dataset_view[i].1 as f64)],
-            "embedding": embeddings[i],
-            }
-        ))
-    }
-
-    Ok(output)
+    Ok((total_count,embeddings_iter))
 }

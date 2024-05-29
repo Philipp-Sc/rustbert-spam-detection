@@ -1,9 +1,12 @@
 use std::env;
 use std::fs::File;
 use std::io::Write;
+use std::sync::Arc;
 use rust_bert_fraud_detection_tools::build::create_embeddings;
 use rust_bert_fraud_detection_tools::build::data::{split_vector};
 use rust_bert_fraud_detection_tools::build::language_model::embeddings::load_llama_cpp_embeddings_from_file;
+use futures_util::StreamExt;
+use tokio::sync::Mutex;
 
 const CSV_DATASET: [&str;6] = [
     "./dataset/youtubeSpamCollection.csv",
@@ -84,22 +87,53 @@ fn train_and_test_text_embedding_knn_regressor(eval: bool) -> anyhow::Result<()>
 }
 
 async fn generate_embeddings() -> anyhow::Result<()> {
+    let buffer_size = 100;
+    let buffer = Arc::new(Mutex::new(Vec::with_capacity(buffer_size)));
 
-    let mut file = File::options()
+    let file = Arc::new(Mutex::new(File::options()
         .write(true)
         .append(true)
         .open("embeddings_dataset.json")
-        .expect("Failed to open file");
+        .expect("Failed to open file")));
 
-    for dataset_path in CSV_DATASET {
-        let embeddings = create_embeddings(vec![&dataset_path]).await?;
+    let (total_count,embeddings) = create_embeddings(CSV_DATASET.into()).await?;
 
-        for embedding in embeddings {
-            let mut json_data = serde_json::to_string(&embedding).expect("Failed to serialize to JSON");
-            json_data.push('\n');
+    let fut = embeddings.enumerate().for_each(|(index,embedding_result)|{
+        let total_count = total_count.clone();
+        let file = file.clone();
+        let buffer = buffer.clone(); async move {
+            println!("{}/{}",index, total_count);
+            if let Ok(embedding) = embedding_result {
+                let json_data = serde_json::to_string(&embedding).expect("Failed to serialize to JSON");
+                let mut buffer_lock = buffer.lock().await;
+                buffer_lock.push(json_data);
+
+                if buffer_lock.len() >= buffer_size {
+                    let mut file = file.lock().await;
+                    for json_data in buffer_lock.drain(..) {
+                        file.write_all(json_data.as_bytes()).expect("Failed to write to file");
+                        file.write_all(b"\n").expect("Failed to write newline");
+                    }
+                }
+            }else{
+                println!("{:?}",embedding_result);
+            }
+    }
+    });
+
+    fut.await;
+
+
+    // Write any remaining items in the buffer
+    let mut buffer_lock = buffer.lock().await;
+    if !buffer_lock.is_empty() {
+        let mut file = file.lock().await;
+        for json_data in buffer_lock.drain(..) {
             file.write_all(json_data.as_bytes()).expect("Failed to write to file");
+            file.write_all(b"\n").expect("Failed to write newline");
         }
     }
+
     return Ok(());
 }
 

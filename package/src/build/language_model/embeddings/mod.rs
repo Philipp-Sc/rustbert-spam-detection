@@ -2,8 +2,9 @@ use std::fs;
 use std::fs::File;
 use std::io::{self, Read};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-
+use serde_json::{json, Value};
+use async_stream::stream;
+use futures::stream::Stream;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Embedding {
@@ -63,26 +64,26 @@ pub async fn text_embedding_request(text: &str) -> Option<Vec<f32>> {
 }
 
 
-pub async fn extract_embeddings(dataset: &Vec<(&str,&f32)>) -> anyhow::Result<Vec<Vec<f32>>> {
-    let mut list_outputs: Vec<Vec<f32>> = Vec::new();
 
-
-    for text in dataset.iter().map(|x| x.0) {
-        match llama_cpp_embedding(text).await.map_err(|original_error| {
-            anyhow::anyhow!(format!("An error occurred during embeddings generation: {:?}",original_error))
-        }) {
-            Ok(output) => list_outputs.push(output),
-            Err(err) => {
-               println!("Error: {:?}", &err); 
-               list_outputs.push(Vec::new());
+pub fn extract_embeddings(dataset: Vec<(String, f32)>) -> impl Stream<Item = Result<Value, anyhow::Error>> {
+    stream! {
+        for (text,label) in dataset {
+            match llama_cpp_embedding(&text).await {
+                Ok(output) => yield Ok(
+                    json!(
+                        {
+                            "text": Value::from(text),
+                            "label": Value::from(label as f64),
+                            "embedding": output,
+                        }
+                    )
+                ),
+                Err(err) => yield Err(anyhow::anyhow!(format!("An error occurred during embeddings generation: {:?}", err))),
             }
-        };
-        println!("count: {}",list_outputs.len());
+        }
     }
-
-    Ok(list_outputs)
-
 }
+
 
 pub fn load_llama_cpp_embeddings_from_file(path: &str) -> anyhow::Result<(Vec<Vec<f32>>, Vec<f32>)> {
     // Read the contents of the file

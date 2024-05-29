@@ -20,19 +20,13 @@ pub async fn llama_cpp_embedding(text: &str) -> Result<Vec<f32>, io::Error> {
 
     let input = text.to_string().chars().take(docker_embedding_dim*4).collect::<String>();
 
-    let output = text_embedding_request(&input).await;
-
-    if let Some(embedding) = output {
-        Ok(embedding)
-    } else {
-        Err(io::Error::new(io::ErrorKind::Other, "Command execution failed"))
-    }
+    text_embedding_request(&input).await
 }
 
 
-pub async fn text_embedding_request(text: &str) -> Option<Vec<f32>> {
+pub async fn text_embedding_request(text: &str) -> Result<Vec<f32>, io::Error> {
     if text.is_empty() {
-        return None;
+        return Err(io::Error::new(io::ErrorKind::Other, "Command execution failed: Empty String."));
     }
     let client = reqwest::Client::new();
 
@@ -56,11 +50,16 @@ pub async fn text_embedding_request(text: &str) -> Option<Vec<f32>> {
         if response.status().is_success() {
             let response = response.json::<Embedding>().await;
             if let Ok(embedding) = response {
-                return Some(embedding.embedding);
+                return Ok(embedding.embedding);
+            }else{
+                return Err(io::Error::new(io::ErrorKind::Other, format!("Command execution failed: {:?}",response)))
             }
+        }else{
+            return Err(io::Error::new(io::ErrorKind::Other, format!("Command execution failed: {:?}",response)))
         }
+    }else{
+        return Err(io::Error::new(io::ErrorKind::Other, format!("Command execution failed: {:?}",response)))
     }
-    None
 }
 
 

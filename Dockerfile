@@ -1,6 +1,6 @@
 FROM rust:latest
 
-RUN apt-get update && apt-get -y install openssl libclang-dev
+RUN apt-get update
 
 RUN mkdir /usr/target
 

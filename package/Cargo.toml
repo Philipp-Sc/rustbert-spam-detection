@@ -2,7 +2,7 @@
 name = "llm-fraud-detection"
 authors = ["Philipp Schlütermann <philipp.schluetermann@udo.edu>"]
 description = "robust fraud detection using llama.cpp"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 [lib]

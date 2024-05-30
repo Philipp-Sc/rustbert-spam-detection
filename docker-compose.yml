@@ -1,16 +1,16 @@
 version: "3"
 services:
 
-  llama-cpp-server-embedding:
+  tmp-llama-cpp-server-embedding:
     build:
       dockerfile: Dockerfile_Llama_cpp
       context: .
-    container_name: llama-cpp-server-embedding
+    container_name: tmp-llama-cpp-server-embedding
     networks:
       - llama-net
     volumes:
       - ./models/:/usr/models
-    command: ["/usr/llama.cpp/server","--host","0.0.0.0","--mlock","-m","/usr/models/uae-large-v1_fp32.gguf","-c","1024","--embedding"]
+    command: ["/usr/llama.cpp/server","--host","0.0.0.0","--mlock","-m","/usr/models/uae-large-v1_fp32.gguf","-c","1024","--embedding", "--slots-endpoint-disable"]
     ulimits:
       rtprio: 95
       memlock: -1
@@ -23,14 +23,17 @@ services:
     networks:
       - llama-net
     volumes:
-      - ./:/usr/workspace
+      - ./package/:/usr/workspace
     environment:
-      DOCKER_EMBEDDING_ENDPOINT: "http://llama-cpp-server-embedding:8080/embedding"
+      DOCKER_EMBEDDING_ENDPOINT: "http://tmp-llama-cpp-server-embedding:8080/embedding"
       EMBEDDING_CONTEXT_SIZE: "1024"
     depends_on:
-      llama-cpp-server-embedding:
+      tmp-llama-cpp-server-embedding:
         condition: service_started
-    command: [ "cargo", "run", "--release" ]
+#    command: [ "cargo", "run", "--release", "train_and_test_text_embedding_knn_regressor" ]
+    command: [ "cargo", "run", "--release", "predict" ]
+#    command: [ "cargo", "run", "--release", "train_and_test_text_embedding_knn_regressor_eval" ]
+#    command: [ "cargo", "run", "--release", "generate_embeddings" ]
 
 
 networks:

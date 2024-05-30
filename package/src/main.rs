@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
 
 fn train_and_test_text_embedding_knn_regressor(eval: bool) -> anyhow::Result<()> {
 
-    let (x_dataset, y_dataset) = load_llama_cpp_embeddings_from_file("embedding_dataset.json")?;
+    let (x_dataset, y_dataset) = load_llama_cpp_embeddings_from_file("embeddings_dataset.json")?;
 
     let spam_count = y_dataset.iter().filter(|&&label| label == 1.0).count();
     let ham_count = y_dataset.iter().filter(|&&label| label == 0.0).count();

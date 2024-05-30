@@ -95,7 +95,6 @@ pub fn load_llama_cpp_embeddings_from_file(path: &str) -> anyhow::Result<(Vec<Ve
 
     let mut json_data = Vec::new();
     for line in contents.split("\n") {
-        println!("line: '''{}'''",line);
         let value: serde_json::Value = serde_json::from_str(line)?;
         json_data.push(value);
     }

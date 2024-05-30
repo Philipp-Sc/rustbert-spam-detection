@@ -1,17 +1,9 @@
-use std::fs;
 use std::fs::File;
 use std::io::{self, Read};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use async_stream::stream;
 use futures::stream::Stream;
-use lazy_static::lazy_static;
-use std::sync::{Arc};
-use tokio::sync::Mutex;
-
-lazy_static! {
-    static ref EMBEDDING_MUTEX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
-}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Embedding {
@@ -27,18 +19,7 @@ pub async fn llama_cpp_embedding(text: &str) -> Result<Vec<f32>, io::Error> {
 
     let input = text.to_string().chars().take(docker_embedding_dim*4).collect::<String>();
 
-    let _guard = EMBEDDING_MUTEX.lock().await;
-
-    let mut trials = 0;
-    let mut result = text_embedding_request(&input).await;
-
-    while trials < 3 && result.is_err() {
-        trials += 1;
-        result = text_embedding_request(&input).await;
-    }
-
-    result
-
+    text_embedding_request(&input).await
 }
 
 
@@ -112,8 +93,12 @@ pub fn load_llama_cpp_embeddings_from_file(path: &str) -> anyhow::Result<(Vec<Ve
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
 
-    // Parse the JSON content
-    let json_data: Vec<serde_json::Value> = serde_json::from_str(&contents)?;
+    let mut json_data = Vec::new();
+    for line in contents.lines() {
+        let line = line.trim();
+        let value: serde_json::Value = serde_json::from_str(line)?;
+        json_data.push(value);
+    }
 
     // Initialize vectors to store embeddings and labels
     let mut embeddings: Vec<Vec<f32>> = Vec::new();
@@ -121,7 +106,6 @@ pub fn load_llama_cpp_embeddings_from_file(path: &str) -> anyhow::Result<(Vec<Ve
 
     // Iterate over each entry in the JSON data
     for entry in json_data {
-        // Extract the "embedding" field
         if let Some(embedding) = entry["embedding"].as_array() {
             // Convert the embedding to a vector of f32
             let embedding_vec: Vec<f32> = embedding
@@ -133,90 +117,11 @@ pub fn load_llama_cpp_embeddings_from_file(path: &str) -> anyhow::Result<(Vec<Ve
             embeddings.push(embedding_vec);
         }
 
-        // Extract the label from the "entry" field (assuming it's an array)
-        if let Some(entry_array) = entry["entry"].as_array() {
-            // Assuming the label is the second item in the array
-            if let Some(label_value) = entry_array.get(1) {
-                // Convert the label to f32 and push it to the labels vector
-                if let Some(label) = label_value.as_f64() {
-                    labels.push(label as f32);
-                }
-            }
+        if let Some(label) = entry["label"].as_f64() {
+            labels.push(label as f32);
         }
     }
 
     // Return the result as a tuple
     Ok((embeddings, labels))
-}
-
-pub fn load_embeddings_from_file(paths: &[&str]) -> anyhow::Result<(Vec<Vec<f32>>, Vec<f32>)> {
-
-    // Initialize an empty vector to store the predicted values for each path.
-    let mut list_sentence_embeddings: Vec<serde_json::Value> = Vec::new();
-
-    // Iterate through each path provided.
-    for path in paths {
-        println!("Processing file: {}", path);
-
-        // Read the contents of a file that is expected to be present in the directory
-        // named "language_model_extract_topics_<path>".
-        let sentence_embeddings: serde_json::Value = match fs::read_to_string(format!("language_model_extract_embeddings_{}", path)) {
-            // If the file exists and its contents can be parsed as JSON, parse the JSON value
-            // and append it to the list_sequence_classification_multi_label_prediction vector.
-            Ok(file) => {
-                match serde_json::from_str(&file) {
-                    Ok(res) => {
-                        println!("Successfully read and parsed JSON for file: {}", path);
-                        res
-                    }
-                    // If parsing the JSON value fails, print the error and append a default value
-                    // to the list_sequence_classification_multi_label_prediction vector.
-                    Err(err) => {
-                        println!("Error parsing JSON for file: {}: {:?}", path, err);
-                        Default::default()
-                    }
-                }
-            }
-            // If the file cannot be read, print the error and append a default value
-            // to the list_sequence_classification_multi_label_prediction vector.
-            Err(err) => {
-                println!("Error parsing JSON for file: {}: {:?}", path, err);
-                Default::default()
-            }
-        };
-
-        // Append the sequence_classification_multi_label_prediction value to the vector.
-        list_sentence_embeddings.push(sentence_embeddings);
-    }
-
-    let (x_dataset, y_dataset): (Vec<Vec<f32>>, Vec<f32>) = list_sentence_embeddings
-        .iter()
-        .flat_map(|sentence_embeddings| {
-            sentence_embeddings["embeddings"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|topics| topics.as_array().unwrap().into_iter().map(|x| x.as_f64().unwrap() as f32).collect::<Vec<f32>>())
-                .zip(
-                    sentence_embeddings["dataset"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|entry| {
-                            let entry = entry.as_array().unwrap();
-                            (
-                                entry[0].as_str().unwrap().to_string(),
-                                entry[1].as_f64().unwrap() as f32,
-                            )
-                        })
-                        .filter(|(text, _)| text != "empty"),
-                ).map(|(topics,(_text,label))|{
-                (topics,label)
-            })
-        })
-        .unzip();
-
-    println!("Final x_dataset and y_dataset both contain {} entries.", y_dataset.len());
-
-    Ok((x_dataset,y_dataset))
 }

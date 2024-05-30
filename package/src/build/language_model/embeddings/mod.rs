@@ -93,35 +93,30 @@ pub fn load_llama_cpp_embeddings_from_file(path: &str) -> anyhow::Result<(Vec<Ve
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
 
-    let mut json_data = Vec::new();
-    for line in contents.split("\n") {
-        println!("{}",line);
-        let value: serde_json::Value = serde_json::from_str(line)?;
-        json_data.push(value);
-    }
-
     // Initialize vectors to store embeddings and labels
     let mut embeddings: Vec<Vec<f32>> = Vec::new();
     let mut labels: Vec<f32> = Vec::new();
 
-    // Iterate over each entry in the JSON data
-    for entry in json_data {
-        if let Some(embedding) = entry["embedding"].as_array() {
-            // Convert the embedding to a vector of f32
-            let embedding_vec: Vec<f32> = embedding
-                .iter()
-                .filter_map(|value| value.as_f64().map(|v| v as f32))
-                .collect();
+    for line in contents.split("\n") {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(line){
+            if let Some(embedding) = value["embedding"].as_array() {
+                // Convert the embedding to a vector of f32
+                let embedding_vec: Vec<f32> = embedding
+                    .iter()
+                    .filter_map(|value| value.as_f64().map(|v| v as f32))
+                    .collect();
 
-            // Push the embedding to the embeddings vector
-            embeddings.push(embedding_vec);
-        }
+                // Push the embedding to the embeddings vector
+                embeddings.push(embedding_vec);
+            }
 
-        if let Some(label) = entry["label"].as_f64() {
-            labels.push(label as f32);
+            if let Some(label) = value["label"].as_f64() {
+                labels.push(label as f32);
+            }
+        }else{
+            println!("Failed to parse: {}",line);
         }
     }
-
     // Return the result as a tuple
     Ok((embeddings, labels))
 }
